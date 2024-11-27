@@ -21,6 +21,7 @@ if __name__ == '__main__':
     mario = pyboy.game_wrapper
     mario.game_area_mapping(mario.mapping_compressed, 0)
     mario.start_game()
+    pyboy.game_wrapper.set_lives_left(0)
 
     while True:
         # Check for keyboard input and map it to PyBoy actions
@@ -40,3 +41,6 @@ if __name__ == '__main__':
         # Step the emulator forward by 1 tick (or frame)
         pyboy.tick()
         print(f"Score: {mario.level_progress}")
+        if(pyboy.game_wrapper.game_over()):
+            print(f"Done: {mario.level_progress}")
+            break

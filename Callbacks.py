@@ -1,6 +1,7 @@
 from stable_baselines3.common.callbacks import BaseCallback
 import time
 
+from Environment import DEATH_PENALTY
 
 class ChartingCallback(BaseCallback):
     """
@@ -74,6 +75,7 @@ class ChartingCallbackMulti(BaseCallback):
         self.environmentEpisodeNum = [] # Keep Track of the Episode of each Environment
         self.start_time = None  # Track the start time for elapsed time
         self.last_time = None  # Last time an average score was calculated
+        self.count = 0
         
     def _on_training_start(self) -> None:
         """
@@ -104,16 +106,29 @@ class ChartingCallbackMulti(BaseCallback):
             if dones[i]:  # If this environment's episode is done
                 # Log the environment's reward
                 if self.verbose > 1:
-                    print(f"Environment {i} - Episode {episodeNum} Reward: {self.environmentScores[i][episodeNum]:.2f}")
+                    print(f"Environment {i} - Episode {episodeNum+1} - Level {infos[i]['level']} - Reward: {self.environmentScores[i][episodeNum]+ DEATH_PENALTY:.2f}")
+                    # print(f"Info: {infos[i]['progress']}")
+
+                if self.verbose > 0:
+                    if self.count >= self.training_env.num_envs:
+                        print(f"Environment {i} - Episode {episodeNum+1} - Level {infos[i]['level']} - Reward: {self.environmentScores[i][episodeNum]+ DEATH_PENALTY:.2f}")
+                        # print(f"Info: {infos[i]['progress']}")
+                        self.count = 0
+                    self.count+=1
+
 
                 # Update Episode Number for that Environment
+                self.scores.append(self.environmentScores[i][episodeNum] + DEATH_PENALTY)
                 self.environmentEpisodeNum[i] += 1
                 self.environmentScores[i].append(0.0)
 
                 # If This episode now has all scores for all environments, calculate the average
+                '''
                 valid = all(env_episode_num > episodeNum for env_episode_num in self.environmentEpisodeNum)
                 if valid:
-                    average_reward = sum(infos[i]["progress"] for i in range(len(self.environmentScores))) / self.training_env.num_envs
+                    average_reward = sum(self.environmentScores[i][episodeNum] for i in range(len(self.environmentScores))) / self.training_env.num_envs
+                    if self.verbose > 2:
+                        print(f"{sum(self.environmentScores[i][episodeNum] for i in range(len(self.environmentScores)))}, {self.training_env.num_envs}")
                     self.scores.append(average_reward)
 
                     # Calculate real-life time elapsed since the last average
@@ -124,5 +139,6 @@ class ChartingCallbackMulti(BaseCallback):
                     # Print average and elapsed time
                     if self.verbose > 0:
                         print(f"Average Reward For Episode {len(self.scores)}: {average_reward:.2f} | Time Elapsed: {elapsed_time:.2f}s")
+                '''
 
         return True

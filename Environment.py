@@ -2,17 +2,28 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 from pyboy import PyBoy
+import random
 
 # Environment Details
-actions = ['','a', 'b', 'left', 'right', 'up', 'down']
+actions = [[''],['a'], ['b'], ['left'], ['right'], ['right', 'a'],['left', 'a'], ['right', 'b'],['left', 'b'], ['right', 'a', 'b'],['left', 'a', 'b'], ['up'], ['down']]
 matrix_shape = (16, 20)
 game_area_observation_space = spaces.Box(low=0, high=255, shape=matrix_shape, dtype=np.uint32)
 
+levels = [ (1,1), (1,2), (1,3), (2,1), (2,2), (3,1), (3,2), (3,3)]
+
+DEATH_PENALTY = 0
 
 class MarioPyBoyEnv(gym.Env):
 
-    def __init__(self, pyboy:PyBoy, fitness_threshold: int = 500, debug=False):
+    def __init__(self, rom:str, fitness_threshold: int = 1000, debug=False):
         super().__init__()
+
+        self.rom = rom
+        if debug:
+            pyboy = PyBoy(self.rom)
+        else:
+            pyboy = PyBoy(self.rom,window="null")  # Use headless mode for speed
+            
         self.pyboy = pyboy
         self._fitness_threshold = fitness_threshold
         self._no_improvement_steps = 0  # Counter for steps without fitness improvement
@@ -22,16 +33,19 @@ class MarioPyBoyEnv(gym.Env):
 
         
         self.pyboy.set_emulation_speed(0)
-        #if debug:
-            #self.pyboy.set_emulation_speed(1)
+        if debug:
+            self.pyboy.set_emulation_speed(1)
         
 
         self.action_space = spaces.Discrete(len(actions))
         self.observation_space = game_area_observation_space
 
+        level = random.choice(levels)
+        self.pyboy.game_wrapper.set_world_level(level[0], level[1])  #Starting level
         self.pyboy.game_wrapper.start_game()
-        self._start_lives = self.pyboy.game_wrapper.lives_left
-        self._start_world = self.pyboy.game_wrapper.world
+        self.pyboy.game_wrapper.game_area_mapping(self.pyboy.game_wrapper.mapping_minimal, 0)
+        self.pyboy.game_wrapper.set_lives_left(0) #Start With One Life
+        self._current_world = self.pyboy.game_wrapper.world
 
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
@@ -40,7 +54,8 @@ class MarioPyBoyEnv(gym.Env):
         if action == 0:
             pass
         else:
-            self.pyboy.button(actions[action])
+            for a in actions[action]:
+                self.pyboy.button(a)
 
         # Consider disabling renderer when not needed to improve speed:
         # self.pyboy.tick(1, False)
@@ -51,16 +66,25 @@ class MarioPyBoyEnv(gym.Env):
 
         done = self.pyboy.game_wrapper.game_over()
 
-        # Losing Life give done
-        if self.pyboy.game_wrapper.lives_left < self._start_lives:
-            done = True
-
         # Level Changed (Level Complete)
-        if self._start_world != self.pyboy.game_wrapper.world:
+        '''
+        if self._current_world != self.pyboy.game_wrapper.world:
             done = True
+        '''
+
 
         self._calculate_fitness()
         reward=self._fitness-self._previous_fitness
+        if done:
+            reward -= DEATH_PENALTY
+        
+        # Reward Moving to the Next World, Fix issue where new world drops score super large
+        if self._current_world != self.pyboy.game_wrapper.world:
+            self._current_world = self.pyboy.game_wrapper.world
+            reward = 100
+        if reward <= -1000:
+            reward = 0
+        
 
         # Check if fitness improved, if not, increment the no_fitness_improvement_steps counter
         if reward <= 0:
@@ -75,8 +99,12 @@ class MarioPyBoyEnv(gym.Env):
             self._no_improvement_steps = 0
 
         observation=self.pyboy.game_area()
-        info = {"progress":self._fitness}
+        #observation = self.normalize_observation(observation)
+        info = {"progress":self._fitness, 'level':self.pyboy.game_wrapper.world}
         truncated = False
+
+        if done and self.debug:
+            print(f"Done: fitness:{self._fitness}, progress:{self.pyboy.game_wrapper.level_progress}")
 
         return observation, reward, done, truncated, info
 
@@ -88,15 +116,28 @@ class MarioPyBoyEnv(gym.Env):
         self._fitness=self.pyboy.game_wrapper.level_progress
 
     def reset(self, **kwargs):
+        if self.debug:
+            self.pyboy = PyBoy(self.rom)
+        else:
+            self.pyboy = PyBoy(self.rom,window="null")  # Use headless mode for speed
+
+        level = random.choice(levels)
+        self.pyboy.game_wrapper.set_world_level(level[0], level[1])  #Starting level
+        self.pyboy.game_wrapper.start_game()
         self.pyboy.game_wrapper.reset_game()
-        self._start_lives = self.pyboy.game_wrapper.lives_left
-        self._start_world = self.pyboy.game_wrapper.world
+        self.pyboy.game_wrapper.game_area_mapping(self.pyboy.game_wrapper.mapping_minimal, 0)
+        self.pyboy.game_wrapper.set_lives_left(0) #Start With One Life
+        self._current_world = self.pyboy.game_wrapper.world
         self._fitness=0
         self._previous_fitness=0
 
         observation=self.pyboy.game_area()
+        #observation = self.normalize_observation(observation)
         info = {}
         return observation, info
+    
+    def normalize_observation(self, observation):
+        return observation / 255.0
 
     def render(self, mode='human'):
         pass
@@ -112,11 +153,7 @@ def make_env(rom: str, debug: bool = False):
     """
     def _init():
         from pyboy import PyBoy
-        if debug:
-            pyboy = PyBoy(rom)
-        else:
-            pyboy = PyBoy(rom,window="null")  # Use headless mode for speed
-        return MarioPyBoyEnv(pyboy, debug=debug)
+        return MarioPyBoyEnv(rom, debug=debug)
     return _init
 
 '''
