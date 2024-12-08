@@ -6,16 +6,17 @@ import random
 
 # Environment Details
 actions = [[''],['a'], ['b'], ['left'], ['right'], ['right', 'a'],['left', 'a'], ['right', 'b'],['left', 'b'], ['right', 'a', 'b'],['left', 'a', 'b'], ['up'], ['down']]
+#actions = [[''], ['left'], ['right'], ['right', 'b'],['left', 'b'], ['right', 'a', 'b'],['left', 'a', 'b']]
 matrix_shape = (16, 20)
 game_area_observation_space = spaces.Box(low=0, high=255, shape=matrix_shape, dtype=np.uint32)
 
-levels = [ (1,1), (1,2), (1,3), (2,1), (2,2), (3,1), (3,2), (3,3)]
+levels = [ (4,1)]
 
 DEATH_PENALTY = 0
 
 class MarioPyBoyEnv(gym.Env):
 
-    def __init__(self, rom:str, fitness_threshold: int = 1000, debug=False):
+    def __init__(self, rom:str, fitness_threshold: int = 1000, debug=False, level = None):
         super().__init__()
 
         self.rom = rom
@@ -40,7 +41,9 @@ class MarioPyBoyEnv(gym.Env):
         self.action_space = spaces.Discrete(len(actions))
         self.observation_space = game_area_observation_space
 
-        level = random.choice(levels)
+        self.level = level
+        if self.level == None:
+            level = random.choice(levels)
         self.pyboy.game_wrapper.set_world_level(level[0], level[1])  #Starting level
         self.pyboy.game_wrapper.start_game()
         self.pyboy.game_wrapper.game_area_mapping(self.pyboy.game_wrapper.mapping_minimal, 0)
@@ -67,10 +70,9 @@ class MarioPyBoyEnv(gym.Env):
         done = self.pyboy.game_wrapper.game_over()
 
         # Level Changed (Level Complete)
-        '''
         if self._current_world != self.pyboy.game_wrapper.world:
             done = True
-        '''
+
 
 
         self._calculate_fitness()
@@ -84,8 +86,6 @@ class MarioPyBoyEnv(gym.Env):
             reward = 100
         if reward <= -1000:
             reward = 0
-        
-
         # Check if fitness improved, if not, increment the no_fitness_improvement_steps counter
         if reward <= 0:
             self._no_improvement_steps += 1
@@ -118,10 +118,13 @@ class MarioPyBoyEnv(gym.Env):
     def reset(self, **kwargs):
         if self.debug:
             self.pyboy = PyBoy(self.rom)
+            #self.pyboy.tick(render=True)
         else:
             self.pyboy = PyBoy(self.rom,window="null")  # Use headless mode for speed
-
-        level = random.choice(levels)
+        
+        level = self.level
+        if self.level == None:
+            level = random.choice(levels)
         self.pyboy.game_wrapper.set_world_level(level[0], level[1])  #Starting level
         self.pyboy.game_wrapper.start_game()
         self.pyboy.game_wrapper.reset_game()

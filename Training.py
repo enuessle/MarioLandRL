@@ -19,8 +19,10 @@ from Callbacks import ChartingCallback, ChartingCallbackMulti
 if __name__ == '__main__':
     #Hyper Parameters
     EPISODES_PER_SAVE = 5000
-    SAVE_NAME = "MarioLandLongRunning"
+    OLD_NAME = "MarioLandLongRunning7"
+    SAVE_NAME = "MarioLandCrossNew"
     MAX_EPISODES = 10000
+    MAX_SAVES = 6
     SCORES = []
     #LOAD = "MarioLandRandomStartFourthIteration"
     #SAVE = "MarioLandRandomStartFifthIteration"
@@ -64,7 +66,7 @@ if __name__ == '__main__':
 
     # Define custom policy kwargs
     POLICY_KWARGS = dict(
-        net_arch=dict(pi=[256, 256], vf=[256, 256]),  # Directly pass a dictionary
+        net_arch=dict(pi=[256 , 256], vf=[256 , 256]),  # Directly pass a dictionary
     )
 
     '''
@@ -78,7 +80,7 @@ if __name__ == '__main__':
 
 
     # Creates a Vector Environment for Multiprocessing
-    def createVectorEnv(rom:str, numEnvironments:int, debug:bool = False):
+    def createVectorEnv(rom:str, numEnvironments:int, debug:bool = True):
         # Create a list of environment factories
         env_fns = [make_env(rom, debug) for _ in range(numEnvironments)]
 
@@ -123,21 +125,33 @@ if __name__ == '__main__':
         
 
 
-    num_envs = os.cpu_count() - 1
-    vec_env = createVectorEnv(supermarioland_rom,num_envs, debug=False)
+    #num_envs = os.cpu_count() - 1
+    #vec_env = createVectorEnv(supermarioland_rom,num_envs, debug=False)
 
     # Training for EPISODES_PER_SAVE episodes, saving each time, then repeating
     
-    callback_max_episodes = StopTrainingOnMaxEpisodes(max_episodes=EPISODES_PER_SAVE)
-    charting_rewards = ChartingCallbackMulti(SCORES, verbose=1)
+    
 
     i = 0
-    while(True):
+    while(i < MAX_SAVES):
+        # Re-Initilize
+        num_envs = os.cpu_count() - 1
+        vec_env = createVectorEnv(supermarioland_rom,num_envs, debug=False)
+
+        callback_max_episodes = StopTrainingOnMaxEpisodes(max_episodes=EPISODES_PER_SAVE)
+        charting_rewards = ChartingCallbackMulti(SCORES, verbose=1)
+
         if ( i == 0 ):
             # New Model For First Iteration
+            '''
             print(f"First Iteration, Making New Model")
             model = PPO("MlpPolicy", vec_env, policy_kwargs=POLICY_KWARGS, verbose=0, gamma = GAMMA,
                     learning_rate=LEARNING_RATE, n_steps=N_STEPS, batch_size=BATCH_SIZE, ent_coef=ENT_COEF, device="cpu")
+            '''
+            save = OLD_NAME
+            model = PPO.load(save, env=vec_env, policy_kwargs=POLICY_KWARGS, verbose=0, gamma = GAMMA,
+                         learning_rate=LEARNING_RATE, n_steps=N_STEPS, batch_size=BATCH_SIZE, ent_coef=ENT_COEF, device="cpu")
+            print("Model loaded successfully.")
         else:
             # Load Previous Iteration Model
             save = SAVE_NAME + f"{i}"
